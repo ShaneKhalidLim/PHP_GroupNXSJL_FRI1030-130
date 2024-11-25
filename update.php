@@ -1,77 +1,61 @@
 <?php
 header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
 
+// Log incoming request data for debugging
+error_log("POST Data: " . print_r($_POST, true));
+error_log("FILES Data: " . print_r($_FILES, true));
+
+// Validate the request method
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Validate input fields
-    $id = isset($_POST['id']) ? trim($_POST['id']) : '';
-    $topic = isset($_POST['uploadTopic']) ? trim($_POST['uploadTopic']) : '';
+    $id = isset($_POST['id']) ? trim($_POST['id']) : ''; // Use the provided ID
+    $title = isset($_POST['uploadTopic']) ? trim($_POST['uploadTopic']) : ''; // Use 'uploadTopic'
 
-    if (empty($id) || empty($topic)) {
-        echo json_encode(["status" => "error", "message" => "ID and topic are required."]);
+    // Check for missing required fields
+    if (empty($id) || empty($title)) {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "ID and title are required."]);
         exit;
     }
 
-    // Database path
-    $dbPath = __DIR__ . '/souvseek.db';
-
-    // Connect to SQLite database
-    try {
-        $db = new PDO("sqlite:$dbPath");
-        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    } catch (Exception $e) {
-        echo json_encode(["status" => "error", "message" => "Database connection error: " . $e->getMessage()]);
-        exit;
-    }
-
-    // Check if an image file is uploaded
+    // Optional: Initialize a variable to hold the uploaded image URL
     $imageURL = null;
-    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-        // File upload parameters
-        $uploadDir = 'uploads/';
-        $imageFile = $_FILES['image'];
-        $imagePath = $uploadDir . uniqid() . basename($imageFile['name']);
 
-        // Create the uploads directory if it doesn't exist
+    // Check if an image is being uploaded
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $uploadDir = __DIR__ . '/uploads/';
+        $imageFile = $_FILES['image'];
+        $uniqueFileName = uniqid() . '_' . basename($imageFile['name']);
+        $imagePath = $uploadDir . $uniqueFileName;
+
+        // Create upload directory if it doesn't exist
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0777, true);
         }
 
-        // Move the uploaded file to the uploads directory
+        // Attempt to move the uploaded file
         if (move_uploaded_file($imageFile['tmp_name'], $imagePath)) {
-            // Generate the URL of the uploaded image
-            $imageURL = "http://" . $_SERVER['HTTP_HOST'] . "/" . $imagePath;
+            $imageURL = "http://" . $_SERVER['HTTP_HOST'] . "/uploads/" . $uniqueFileName;
         } else {
-            echo json_encode(["status" => "error", "message" => "Failed to save the uploaded image."]);
+            http_response_code(500);
+            echo json_encode(["status" => "error", "message" => "Image upload failed."]);
             exit;
         }
     }
 
-    // Perform the update in the database
-    try {
-        if ($imageURL) {
-            $stmt = $db->prepare("UPDATE shop SET title = :title, image_url = :imageURL WHERE id = :id");
-            $stmt->bindParam(':imageURL', $imageURL);
-        } else {
-            $stmt = $db->prepare("UPDATE shop SET title = :title WHERE id = :id");
-        }
-
-        $stmt->bindParam(':title', $topic);
-        $stmt->bindParam(':id', $id);
-
-        if ($stmt->execute()) {
-            echo json_encode([
-                "status" => "success",
-                "message" => "Update successful!",
-                "imageURL" => $imageURL,
-                "topic" => $topic
-            ]);
-        } else {
-            echo json_encode(["status" => "error", "message" => "Update failed."]);
-        }
-    } catch (Exception $e) {
-        echo json_encode(["status" => "error", "message" => "Database error: " . $e->getMessage()]);
-    }
+    http_response_code(200);
+    echo json_encode([
+        "status" => "success",
+        "message" => "Data updated successfully.",
+        "data" => [
+            "id" => $id,
+            "title" => $title,
+            "imageURL" => $imageURL // Include the image URL only if provided
+        ]
+    ]);
 } else {
-    // Invalid request method
+    http_response_code(405);
     echo json_encode(["status" => "error", "message" => "Invalid request method."]);
 }
