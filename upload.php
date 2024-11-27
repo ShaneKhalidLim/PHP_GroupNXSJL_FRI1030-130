@@ -1,6 +1,11 @@
 <?php
 header("Content-Type: application/json");
 
+// Allow CORS for cross-origin requests
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+
 // Check if the request method is POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validate input fields
@@ -12,19 +17,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Check if an image file is uploaded
-    if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-        echo json_encode(["status" => "error", "message" => "No image file uploaded."]);
+    if (!isset($_FILES['image'])) {
+        echo json_encode(["status" => "error", "message" => "No file uploaded."]);
+        exit;
+    }
+
+    // Check for file upload errors
+    if ($_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+        $errorMessages = [
+            UPLOAD_ERR_INI_SIZE => "The uploaded file exceeds the upload_max_filesize directive in php.ini.",
+            UPLOAD_ERR_FORM_SIZE => "The uploaded file exceeds the MAX_FILE_SIZE directive that was specified in the HTML form.",
+            UPLOAD_ERR_PARTIAL => "The uploaded file was only partially uploaded.",
+            UPLOAD_ERR_NO_FILE => "No file was uploaded.",
+            UPLOAD_ERR_NO_TMP_DIR => "Missing a temporary folder.",
+            UPLOAD_ERR_CANT_WRITE => "Failed to write file to disk.",
+            UPLOAD_ERR_EXTENSION => "File upload stopped by a PHP extension."
+        ];
+
+        $errorMessage = $errorMessages[$_FILES['image']['error']] ?? "Unknown upload error.";
+        echo json_encode(["status" => "error", "message" => $errorMessage]);
         exit;
     }
 
     // File upload parameters
     $uploadDir = 'uploads/';
     $imageFile = $_FILES['image'];
-    $imagePath = $uploadDir . uniqid() . basename($imageFile['name']);
+
+    // Generate a unique file name to prevent overwrites
+    $imagePath = $uploadDir . uniqid() . "_" . basename($imageFile['name']);
 
     // Create the uploads directory if it doesn't exist
     if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
+        if (!mkdir($uploadDir, 0777, true)) {
+            echo json_encode(["status" => "error", "message" => "Failed to create uploads directory."]);
+            exit;
+        }
     }
 
     // Move the uploaded file to the uploads directory
@@ -47,4 +74,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Invalid request method
     echo json_encode(["status" => "error", "message" => "Invalid request method."]);
 }
-?>
